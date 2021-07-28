@@ -1,0 +1,15 @@
+{
+    "private": true,
+    "scripts": {
+        "postinstall": "dotnet tool restore",
+        "start": "dotnet fable watch src -o deploy --run snowpack dev"
+    },
+    "dependencies": {
+        "react": "^16.13.0",
+        "react-dom": "^16.13.0"
+    },
+    "devDependencies": {
+        "@snowpack/plugin-react-refresh": "^2.5.0",
+        "snowpack": "^3.8.0"
+    }
+}
