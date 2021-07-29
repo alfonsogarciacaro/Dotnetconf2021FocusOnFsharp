@@ -7,6 +7,18 @@
       "commands": [
         "fable"
       ]
+    },
+    "fantomas-tool": {
+      "version": "4.5.1",
+      "commands": [
+        "fantomas"
+      ]
+    },
+    "hawaii": {
+      "version": "0.41.0",
+      "commands": [
+        "hawaii"
+      ]
     }
   }
 }

@@ -1,0 +1,6 @@
+{
+    "schema": "https://petstore3.swagger.io/api/v3/openapi.json",
+    "output": "./PetStore",
+    "project": "PetStore",
+    "target": "fable"
+}
