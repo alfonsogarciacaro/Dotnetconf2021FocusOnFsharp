@@ -12,53 +12,42 @@ module Form =
                 get: 'Values -> 'Input,
                 update: 'Input -> 'Values -> 'Values,
                 parse: 'Input -> Result<'Output, string>,
-                ?externalError: 'Values -> string option
+                ?serverError: 'Values -> string option
             ) : FieldConfig<_, _, _, _> =
             { Parser = parse
               Value = get
               Update = update
-              Error = defaultArg externalError (fun _ -> None)
+              Error = defaultArg serverError (fun _ -> None)
               Attributes = attributes }
 
-        static member ConfigText(label, get, update, ?placeholder, ?parse, ?externalError) =
+        static member ConfigText(label, get, update, ?placeholder, ?parse, ?serverError) =
             let attributes: Field.TextField.Attributes =
                 { Label = label
                   Placeholder = defaultArg placeholder "" }
 
-            Make.Config(attributes, get, update, defaultArg parse Ok, ?externalError = externalError)
+            Make.Config(attributes, get, update, defaultArg parse Ok, ?serverError = serverError)
 
-        static member FieldText(label, get, update, ?placeholder, ?parse, ?externalError) =
-            Make.ConfigText(
-                label,
-                get,
-                update,
-                ?placeholder = placeholder,
-                ?parse = parse,
-                ?externalError = externalError
-            )
+        static member FieldText(label, get, update, ?placeholder, ?parse, ?serverError) =
+            Make.ConfigText(label, get, update, ?placeholder = placeholder, ?parse = parse, ?serverError = serverError)
             |> Form.textField
 
-        static member FieldPassword(label, get, update, ?placeholder, ?parse, ?externalError) =
-            Make.ConfigText(
-                label,
-                get,
-                update,
-                ?placeholder = placeholder,
-                ?parse = parse,
-                ?externalError = externalError
-            )
+        static member FieldPassword(label, get, update, ?placeholder, ?parse, ?serverError) =
+            Make.ConfigText(label, get, update, ?placeholder = placeholder, ?parse = parse, ?serverError = serverError)
             |> Form.passwordField
 
-        static member FieldEmail(label, get, update, ?placeholder, ?parse, ?externalError) =
-            Make.ConfigText(
-                label,
+        static member FieldEmail(label, get, update, ?placeholder, ?parse, ?serverError) =
+            Make.ConfigText(label, get, update, ?placeholder = placeholder, ?parse = parse, ?serverError = serverError)
+            |> Form.emailField
+
+        static member Checkbox(label, get, update, ?serverError) =
+            Make.Config(
+                { Field.CheckboxField.Attributes.Text = label },
                 get,
                 update,
-                ?placeholder = placeholder,
-                ?parse = parse,
-                ?externalError = externalError
+                parse = Ok,
+                ?serverError = serverError
             )
-            |> Form.emailField
+            |> Form.checkboxField
 
         static member Select<'T, 'Values when 'T: equality>
             (
@@ -99,11 +88,9 @@ module Form =
 
     module View =
 
-        open System
         open Fable.React
         open Fable.React.Props
         open Fable.Form
-        open Fable.Form.Simple
         open Fable.Form.Simple.Form.View
 
         let form
@@ -169,7 +156,7 @@ module Form =
                Value = value
                Attributes = attributes }: CheckboxFieldConfig<'Msg>)
             =
-            B.div [ Css.FormCheck ] [
+            B.div [ Css.FormCheck; Css.Mb3 ] [
                 input [
                     Type "checkbox"
                     Class Css.FormCheckInput

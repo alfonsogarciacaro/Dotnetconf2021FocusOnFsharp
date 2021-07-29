@@ -9,8 +9,15 @@ type Css = CssClasses<"https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/boo
 type Fa =
     CssClasses<"https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.3/css/fontawesome.css", Naming.PascalCase>
 
+type SortDirection =
+    | Ascending
+    | Descending
+
 type B =
     static member classes(classes: string list) = classes |> String.concat " " |> Class // TODO: Trim? Filter empty? Omit if empty list?
+
+    static member data(key: string, value: obj) =
+        HTMLAttr.Custom("data-bs-" + key, value)
 
     static member section (classes: string list) (children: ReactElement list) = section [ B.classes classes ] children
     static member div (classes: string list) (children: ReactElement list) = div [ B.classes classes ] children
@@ -80,6 +87,29 @@ type B =
     static member Table classes (headers: ReactElement list) (rows: ReactElement list) =
         B.TableWithBodyClasses classes [] headers rows
 
+    static member ThSortable txt sort dispatch =
+        th [ Class "clickable"
+             OnClick
+                 (fun _ ->
+                     match sort with
+                     | Some Ascending -> dispatch Descending
+                     | Some Descending
+                     | None -> dispatch Ascending) ] [
+
+            B.div [ Css.DFlex; Css.AlignItemsCenter ] [
+                B.span [ Css.FlexGrow1 ] [ str txt ]
+                match sort with
+                | None -> ()
+                | Some dir ->
+                    B.Fa [
+                        if dir = Descending then
+                            Fa.FaSortDown
+                        else
+                            Fa.FaSortUp
+                    ]
+            ]
+        ]
+
     static member Button(?classes: string list, ?onClick: unit -> unit, ?disabled: bool, ?text: string) =
         button [ B.classes (Css.Btn :: (defaultArg classes []))
                  Disabled(defaultArg disabled false)
@@ -111,6 +141,20 @@ type B =
                 str text
             ]
         ]
+
+    static member Input(label_, value, onChange, ?classes, ?type_, ?disabled) =
+        B.div
+            (defaultArg classes [])
+            [ label [ Class Css.FormLabel ] [
+                str label_
+              ]
+              input [
+                  Type(defaultArg type_ "text")
+                  B.classes [ Css.FormControl ]
+                  OnChange(fun ev -> onChange ev.Value)
+                  Disabled(defaultArg disabled false)
+                  Value value
+              ] ]
 
     static member Nav classes (children: ReactElement list) = B.ul (Css.Nav :: classes) children
     static member NavItem classes (children: ReactElement list) = B.li (Css.NavItem :: classes) children
@@ -147,4 +191,73 @@ type B =
                           ev.preventDefault ()
                           onClick ()) ]
                 children
+        ]
+
+    static member Toast msg =
+        div [ B.classes [
+                  Css.PositionFixed
+                  Css.Bottom0
+                  Css.End0
+                  Css.P3
+              ]
+              Style [ ZIndex 1000 ] ] [
+
+            B.div [ Css.Toast
+                    Css.AlignItemsCenter
+                    Css.TextWhite
+                    Css.BgPrimary
+                    Css.Border0 ] [
+                B.div [ Css.DFlex ] [
+                    B.div [ Css.ToastBody ] [ str msg ]
+                ]
+            ]
+        ]
+
+    static member Carousel id (images: {| src: string; caption: string |} list) =
+        div [ Id id
+              B.classes [ Css.Carousel; "slide" ]
+              B.data ("ride", "carousel") ] [
+            B.div [ Css.CarouselIndicators ] [
+                button [ Type "button"
+                         B.data ("target", "#" + id)
+                         B.data ("slide-to", 0)
+                         Class Css.Active ] []
+                button [ Type "button"
+                         B.data ("target", "#" + id)
+                         B.data ("slide-to", 1) ] []
+                button [ Type "button"
+                         B.data ("target", "#" + id)
+                         B.data ("slide-to", 2) ] []
+            ]
+            B.div
+                [ Css.CarouselInner ]
+                (images
+                 |> List.mapi
+                     (fun idx image ->
+                         div [ B.classes [
+                                   Css.CarouselItem
+                                   if idx = 0 then Css.Active
+                               ] ] [
+                             img [
+                                 Src image.src
+                                 Alt image.caption
+                                 B.classes [ Css.DBlock; Css.W100 ]
+                             ]
+                             B.div [ Css.CarouselCaption
+                                     Css.DNone
+                                     Css.DMdBlock ] [
+                                 B.p [] image.caption
+                             ]
+                         ]))
+
+            button [ Type "button"
+                     B.data ("target", "#" + id)
+                     B.data ("slide-to", "prev") ] [
+                B.span [ Css.CarouselControlPrevIcon ] []
+            ]
+            button [ Type "button"
+                     B.data ("target", "#" + id)
+                     B.data ("slide-to", "next") ] [
+                B.span [ Css.CarouselControlNextIcon ] []
+            ]
         ]
