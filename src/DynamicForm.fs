@@ -54,27 +54,31 @@ let update (msg: Msg) (model: Model) =
 
     | ResetDemo -> init ()
 
-let private studentForm =
+let nameField =
+    Form.Make.FieldText("Name", get = (fun vs -> vs.Name), update = (fun v vs -> { vs with Name = v }))
+
+let subjectField =
+    Form.Make.FieldText("Subject", get = (fun vs -> vs.Subject), update = (fun v vs -> { vs with Subject = v }))
+
+let studentForm =
     Form.succeed NewStudent
-    |> Form.append (Form.Make.FieldText("Name", get = (fun vs -> vs.Name), update = (fun v vs -> { vs with Name = v })))
+    |> Form.append nameField
     |> Form.section "Student"
 
-let private teacherForm =
+let teacherForm =
     Form.succeed (fun name subject -> NewTeacher(name, subject))
-    |> Form.append (Form.Make.FieldText("Name", get = (fun vs -> vs.Name), update = (fun v vs -> { vs with Name = v })))
-    |> Form.append (
-        Form.Make.FieldText("Subject", get = (fun vs -> vs.Subject), update = (fun v vs -> { vs with Subject = v }))
-    )
+    |> Form.append nameField
+    |> Form.append subjectField
     |> Form.section "Teacher"
 
-let private form: Form.Form<Values, Msg> =
+let form: Form.Form<Values, Msg> =
     Form.Make.Select("Type", get = (fun vs -> vs.UserType), update = (fun v vs -> { vs with UserType = v }))
     |> Form.andThen
         (function
         | Student -> studentForm
         | Teacher -> teacherForm)
 
-let private renderResultView dispatch (messageBody: ReactElement) =
+let renderResultView dispatch (messageBody: ReactElement) =
     B.div [] [
         B.div [ Css.Card; Css.Mb3 ] [
             messageBody
@@ -89,7 +93,6 @@ let view (model: Model) (dispatch: Dispatch<Msg>) =
             match values.Values.UserType with
             | Student -> "Create student"
             | Teacher -> "Create teacher"
-        // | Assistant -> "Create assistant"
 
         Form.View.asHtml
             { Dispatch = dispatch

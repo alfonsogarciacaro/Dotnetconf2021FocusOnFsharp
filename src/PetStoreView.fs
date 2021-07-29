@@ -7,46 +7,7 @@ open PetStore
 open PetStore.Types
 
 let petStoreUri = "https://petstore3.swagger.io/api/v3"
-
-type Model<'T, 'Col when 'Col :> IComparer<'T>> =
-    { Items: 'T list
-      SortedAndFilteredItems: 'T list
-      Sort: 'Col * SortDirection
-      Filter: 'T -> bool }
-    static member Init(sortCol, ?sortDir, ?filter) =
-        { Items = []
-          SortedAndFilteredItems = []
-          Sort = sortCol, defaultArg sortDir Ascending
-          Filter = defaultArg filter (fun _ -> true) }
-
-type Msg<'T, 'Col> =
-    | UpdateItems of 'T list
-    | SortAndFilterItems
-    | UpdateSort of 'Col * SortDirection
-    | UpdateFilter of ('T -> bool)
-
-let update msg model =
-    let sortAndFilter model =
-        let sortCol, sortDir = model.Sort
-
-        let comparer =
-            let comparer = sortCol :> IComparer<_>
-
-            match sortDir with
-            | Ascending -> (fun x y -> comparer.Compare(x, y))
-            | Descending -> (fun x y -> comparer.Compare(x, y) * -1)
-
-        { model with
-              SortedAndFilteredItems =
-                  model.Items
-                  |> List.filter model.Filter
-                  |> List.sortWith comparer }
-
-    match msg with
-    | UpdateItems items -> { model with Items = items } |> sortAndFilter
-    | SortAndFilterItems -> sortAndFilter model
-    | UpdateSort (col, dir) -> { model with Sort = col, dir } |> sortAndFilter
-    | UpdateFilter filter -> { model with Filter = filter } |> sortAndFilter
+let petStore = PetStoreClient(petStoreUri)
 
 type Pet with
     member this.idAsString =
@@ -63,6 +24,56 @@ type Pet with
         |> Option.defaultValue ""
 
 
+
+module ListView =
+    type IFilter<'T> =
+        abstract MakeFilter : unit -> ('T -> bool)
+
+    type Model<'T, 'Col, 'Filter when 'Col :> IComparer<'T> and 'Filter :> IFilter<'T>> =
+        { Items: 'T list
+          SortedAndFilteredItems: 'T list
+          Sort: 'Col * SortDirection
+          Filter: 'Filter }
+        static member Init(sortCol, sortDir, filter) =
+            { Items = []
+              SortedAndFilteredItems = []
+              Sort = sortCol, sortDir
+              Filter = filter }
+
+    type Msg<'T, 'Col, 'Filter> =
+        | UpdateItems of 'T list
+        | UpdateSort of 'Col * SortDirection
+        | UpdateFilter of 'Filter
+
+    let update msg model =
+        let sortAndFilter model =
+            let sortCol, sortDir = model.Sort
+
+            let comparer =
+                let comparer = sortCol :> IComparer<_>
+
+                match sortDir with
+                | Ascending -> (fun x y -> comparer.Compare(x, y))
+                | Descending -> (fun x y -> comparer.Compare(x, y) * -1)
+
+            let filter =
+                (model.Filter :> IFilter<_>).MakeFilter()
+
+            { model with
+                  SortedAndFilteredItems =
+                      model.Items
+                      |> List.filter filter
+                      |> List.sortWith comparer }
+
+        match msg with
+        | UpdateItems items -> { model with Items = items } |> sortAndFilter
+        | UpdateSort (col, dir) -> { model with Sort = col, dir } |> sortAndFilter
+        | UpdateFilter filter -> { model with Filter = filter } |> sortAndFilter
+
+
+
+open ListView
+
 type Col =
     | Name
     | Category
@@ -72,9 +83,38 @@ type Col =
             | Name -> compare x.name y.name
             | Category -> compare x.categoryAsString y.categoryAsString
 
-type Model = Model<Pet, Col>
+type Filter =
+    { Name: string
+      Category: string }
 
-let petStore = PetStoreClient(petStoreUri)
+    static member Empty = { Name = ""; Category = "" }
+
+    interface IFilter<Pet> with
+        member this.MakeFilter() =
+            let nameFilter =
+                let name = this.Name.Trim().ToLower()
+
+                if name.Length > 0 then
+                    Some(fun (pet: Pet) -> pet.name.ToLower().Contains(name))
+                else
+                    None
+
+            let categoryFilter =
+                let category = this.Category.Trim().ToLower()
+
+                if category.Length > 0 then
+                    Some(fun (pet: Pet) -> pet.categoryAsString.ToLower().Contains(category))
+                else
+                    None
+
+            match nameFilter, categoryFilter with
+            | Some f, None
+            | None, Some f -> f
+            | Some f1, Some f2 -> fun x -> f1 x && f2 x
+            | None, None -> fun _ -> true
+
+
+type Model = Model<Pet, Col, Filter>
 
 let getPets dispatch =
     async {
@@ -83,46 +123,25 @@ let getPets dispatch =
         | FindPetsByStatus.OK (pets) -> UpdateItems pets |> dispatch
     }
 
-let makeFilter (filter: {| name: string; category: string |}) =
-    let nameFilter =
-        let name = filter.name.Trim().ToLower()
+let sortableHeader model dispatch col txt =
+    let sortCol, sortDir = model.Sort
 
-        if name.Length > 0 then
-            Some(fun (pet: Pet) -> pet.name.ToLower().Contains(name))
-        else
-            None
+    B.ThSortable
+        txt
+        (if sortCol = col then
+             Some sortDir
+         else
+             None)
+        (fun dir -> UpdateSort(col, dir) |> dispatch)
 
-    let categoryFilter =
-        let category = filter.category.Trim().ToLower()
-
-        if category.Length > 0 then
-            Some(fun (pet: Pet) -> pet.categoryAsString.ToLower().Contains(category))
-        else
-            None
-
-    match nameFilter, categoryFilter with
-    | Some f, None
-    | None, Some f -> f
-    | Some f1, Some f2 -> fun x -> f1 x && f2 x
-    | None, None -> fun _ -> true
 
 [<Feliz.ReactComponent>]
 let Root () =
-    let filter =
-        Hooks.useState {| name = ""; category = "" |}
-
     let state =
-        Hooks.useStateLazy (fun _ -> Model.Init(Name))
+        Hooks.useStateLazy (fun _ -> Model.Init(Name, Ascending, Filter.Empty))
 
     let model = state.current
     let dispatch msg = state.update (update msg)
-
-    let updateFilter f =
-        filter.update
-            (fun v ->
-                let filter = f v
-                makeFilter filter |> UpdateFilter |> dispatch
-                filter)
 
     Hooks.useEffect (
         (fun _ ->
@@ -131,54 +150,74 @@ let Root () =
         [||]
     )
 
-    // let rows =
-    //     match model.Items with
-    //     | [] -> B.p [] "No pets :("
-    //     | pets ->
-    //         B.ul [] [
-    //             for pet in model.Items -> B.li [] [ B.p [] pet.name ]
-    //         ]
-
-    let sortableHeader col txt =
-        let sortCol, sortDir = model.Sort
-
-        B.ThSortable
-            txt
-            (if sortCol = col then
-                 Some sortDir
-             else
-                 None)
-            (fun dir -> UpdateSort(col, dir) |> dispatch)
-
-
-    let rows =
-        B.Table
-            [ Css.TableStriped
-              Css.TableHover
-              Css.Border ]
-            [ sortableHeader Name "Name"
-              sortableHeader Category "Category"
-              th [] [ str "status" ] ]
-            [ for pet in model.SortedAndFilteredItems do
-                  tr [ Key pet.idAsString ] [
-                      td [] [ str pet.name ]
-                      td [] [ str pet.categoryAsString ]
-                      td [] [ str pet.statusAsString ]
-                  ] ]
-
-    fragment [] [
-        B.div [ Css.DFlex; Css.Mb3 ] [
-            B.Input(
-                classes = [ Css.Me2 ],
-                label_ = "Name",
-                value = filter.current.name,
-                onChange = fun v -> updateFilter (fun f -> {| f with name = v |})
-            )
-            B.Input(
-                label_ = "Category",
-                value = filter.current.category,
-                onChange = fun v -> updateFilter (fun f -> {| f with category = v |})
-            )
+    match model.Items with
+    | [] -> B.p [] "No pets :("
+    | pets ->
+        B.ul [] [
+            for pet in pets -> B.li [] [ B.p [] pet.name ]
         ]
-        rows
-    ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// let rows =
+//     B.Table
+//         [ Css.TableStriped
+//           Css.TableHover
+//           Css.Border ]
+//         [ th [] [ str "Name" ]
+//           th [] [ str "Category" ]
+//           th [] [ str "Status" ] ]
+//         [ for pet in model.SortedAndFilteredItems do
+//               tr [ Key pet.idAsString ] [
+//                   td [] [ str pet.name ]
+//                   td [] [ str pet.categoryAsString ]
+//                   td [] [ str pet.statusAsString ]
+//               ] ]
+
+// rows
+
+
+// fragment [] [
+//     B.div [ Css.DFlex; Css.Mb3 ] [
+//         B.Input(
+//             classes = [ Css.Me2 ],
+//             label_ = "Name",
+//             value = model.Filter.Name,
+//             onChange =
+//                 fun v ->
+//                     { model.Filter with Name = v }
+//                     |> UpdateFilter
+//                     |> dispatch
+//         )
+//         B.Input(
+//             label_ = "Category",
+//             value = model.Filter.Category,
+//             onChange =
+//                 fun v ->
+//                     { model.Filter with Category = v }
+//                     |> UpdateFilter
+//                     |> dispatch
+//         )
+//     ]
+//     rows
+// ]

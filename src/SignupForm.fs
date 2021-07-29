@@ -87,7 +87,19 @@ let update (msg: Msg) (model: Model) =
         | FillingForm _ -> FillingForm formModel
         | _ -> model
 
-    | Signup validUser -> Success validUser // Dummy implementation, here we should call the server
+    // Dummy implementation, here we should call the server
+    | Signup validUser ->
+        match model with
+        | FillingForm form -> Success validUser
+        // { form.Values with
+        //       ServerErrors =
+        //           { Email =
+        //                 Some
+        //                     { Value = form.Values.Email
+        //                       Error = "This email is already registered" } } }
+        // |> Form.View.idle
+        // |> FillingForm
+        | _ -> model
 
     | ResetTheDemo -> init ()
 
@@ -104,7 +116,12 @@ let private form: Form.Form<FormValues, Msg> =
             "Email",
             parse = Validation.tryParseEmail,
             get = (fun vs -> vs.Email),
-            update = (fun v vs -> { vs with Email = v })
+            update = (fun v vs -> { vs with Email = v }),
+            serverError =
+                (fun values ->
+                    match values.ServerErrors.Email with
+                    | Some er when er.Value = values.Email -> Some er.Error
+                    | _ -> None)
         )
 
     let nameField =
@@ -167,7 +184,7 @@ let view (model: Model) dispatch =
             form
             values
 
-    | Success user -> B.h1 [] $"Congratulations! Now {user.Name} is a member of the team!"
+    | Success user -> B.h2 [] $"Congratulations! Now {user.Name} is a member of the team!"
 
 open Fable.React
 
