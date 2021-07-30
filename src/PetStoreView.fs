@@ -6,8 +6,17 @@ open Fable.React.Props
 open PetStore
 open PetStore.Types
 
+// PetStore client and some extensions for Pet type
+// See PetStore project generated with Hawaii: https://github.com/Zaid-Ajaj/Hawaii
 let petStoreUri = "https://petstore3.swagger.io/api/v3"
 let petStore = PetStoreClient(petStoreUri)
+
+let getPets dispatch =
+    async {
+        match! petStore.findPetsByStatus (status = string PetStatus.Available) with
+        | FindPetsByStatus.BadRequest _ -> ()
+        | FindPetsByStatus.OK (pets) -> dispatch pets
+    }
 
 type Pet with
     member this.idAsString =
@@ -24,7 +33,8 @@ type Pet with
         |> Option.defaultValue ""
 
 
-
+/// Generic Elmish-like component that can be used to display
+/// any list items with filtering and sorting
 module ListView =
     type IFilter<'T> =
         abstract MakeFilter : unit -> ('T -> bool)
@@ -71,7 +81,7 @@ module ListView =
         | UpdateFilter filter -> { model with Filter = filter } |> sortAndFilter
 
 
-
+// Declaration of concrete Col (for sorting) and Filter types
 open ListView
 
 type Col =
@@ -116,25 +126,6 @@ type Filter =
 
 type Model = Model<Pet, Col, Filter>
 
-let getPets dispatch =
-    async {
-        match! petStore.findPetsByStatus (status = string PetStatus.Available) with
-        | FindPetsByStatus.BadRequest _ -> ()
-        | FindPetsByStatus.OK (pets) -> UpdateItems pets |> dispatch
-    }
-
-let sortableHeader model dispatch col txt =
-    let sortCol, sortDir = model.Sort
-
-    B.ThSortable
-        txt
-        (if sortCol = col then
-             Some sortDir
-         else
-             None)
-        (fun dir -> UpdateSort(col, dir) |> dispatch)
-
-
 [<Feliz.ReactComponent>]
 let Root () =
     let state =
@@ -146,78 +137,58 @@ let Root () =
     Hooks.useEffect (
         (fun _ ->
             if model.Items.IsEmpty then
-                getPets dispatch |> Async.StartImmediate),
+                getPets (UpdateItems >> dispatch)
+                |> Async.StartImmediate),
         [||]
     )
 
-    match model.Items with
-    | [] -> B.p [] "No pets :("
-    | pets ->
-        B.ul [] [
-            for pet in pets -> B.li [] [ B.p [] pet.name ]
+    let sortableHeader col txt =
+        let sortCol, sortDir = model.Sort
+
+        B.ThSortable
+            txt
+            (if sortCol = col then
+                 Some sortDir
+             else
+                 None)
+            (fun dir -> UpdateSort(col, dir) |> dispatch)
+
+    let rows =
+        B.Table
+            [ Css.TableStriped
+              Css.TableHover
+              Css.Border ]
+            [ sortableHeader Name "Name"
+              sortableHeader Category "Category"
+              th [] [ str "Status" ] ]
+            [ for pet in model.SortedAndFilteredItems do
+                  tr [ Key pet.idAsString ] [
+                      td [] [ str pet.name ]
+                      td [] [ str pet.categoryAsString ]
+                      td [] [ str pet.statusAsString ]
+                  ] ]
+
+    fragment [] [
+        B.div [ Css.DFlex; Css.Mb3 ] [
+            B.Input(
+                classes = [ Css.Me2 ],
+                label_ = "Name",
+                value = model.Filter.Name,
+                onChange =
+                    fun v ->
+                        { model.Filter with Name = v }
+                        |> UpdateFilter
+                        |> dispatch
+            )
+            B.Input(
+                label_ = "Category",
+                value = model.Filter.Category,
+                onChange =
+                    fun v ->
+                        { model.Filter with Category = v }
+                        |> UpdateFilter
+                        |> dispatch
+            )
         ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// let rows =
-//     B.Table
-//         [ Css.TableStriped
-//           Css.TableHover
-//           Css.Border ]
-//         [ th [] [ str "Name" ]
-//           th [] [ str "Category" ]
-//           th [] [ str "Status" ] ]
-//         [ for pet in model.SortedAndFilteredItems do
-//               tr [ Key pet.idAsString ] [
-//                   td [] [ str pet.name ]
-//                   td [] [ str pet.categoryAsString ]
-//                   td [] [ str pet.statusAsString ]
-//               ] ]
-
-// rows
-
-
-// fragment [] [
-//     B.div [ Css.DFlex; Css.Mb3 ] [
-//         B.Input(
-//             classes = [ Css.Me2 ],
-//             label_ = "Name",
-//             value = model.Filter.Name,
-//             onChange =
-//                 fun v ->
-//                     { model.Filter with Name = v }
-//                     |> UpdateFilter
-//                     |> dispatch
-//         )
-//         B.Input(
-//             label_ = "Category",
-//             value = model.Filter.Category,
-//             onChange =
-//                 fun v ->
-//                     { model.Filter with Category = v }
-//                     |> UpdateFilter
-//                     |> dispatch
-//         )
-//     ]
-//     rows
-// ]
+        rows
+    ]

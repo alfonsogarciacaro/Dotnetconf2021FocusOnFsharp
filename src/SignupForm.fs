@@ -3,25 +3,6 @@ module SignupForm
 open Fable.Form.Simple
 open Fable.Form.Simple.Bootstrap
 
-/// Validated user
-type User =
-    { Email: string
-      Password: string
-      Name: string
-      MakePublic: bool }
-
-type ServerError = { Value: string; Error: string }
-
-type ServerErrors = { Email: ServerError option }
-
-type FormValues =
-    { Email: string
-      Password: string
-      RepeatPassword: string
-      Name: string
-      MakePublic: bool
-      ServerErrors: ServerErrors }
-
 module Validation =
     open System.Text.RegularExpressions
 
@@ -34,8 +15,6 @@ module Validation =
         else
             Error "Enter a valid email"
 
-    let tryParseName (value: string) = Ok value
-
     let tryParsePassword (value: string) =
         let minLen = 6
 
@@ -44,22 +23,24 @@ module Validation =
         else
             Ok value
 
-    let tryUser (form: FormValues) =
-        ResultCE.result {
-            let! email = tryParseEmail form.Email
-            let! name = tryParseName form.Name
-            let! password = tryParsePassword form.Password
+/// Validated user
+type User =
+    { Email: string
+      Password: string
+      Name: string
+      MakePublic: bool }
 
-            if password <> form.RepeatPassword then
-                return! Error "Passwords are not equal"
-            else
-                return
-                    { Email = email
-                      Password = password
-                      Name = name
-                      MakePublic = form.MakePublic }
-        }
+// These are errors that we receive from the server after attempting to sign up
+type ServerError = { Value: string; Error: string }
+type ServerErrors = { Email: ServerError option }
 
+type FormValues =
+    { Email: string
+      Password: string
+      RepeatPassword: string
+      Name: string
+      MakePublic: bool
+      ServerErrors: ServerErrors }
 
 type Model =
     | FillingForm of Form.View.Model<FormValues>
@@ -87,10 +68,13 @@ let update (msg: Msg) (model: Model) =
         | FillingForm _ -> FillingForm formModel
         | _ -> model
 
-    // Dummy implementation, here we should call the server
     | Signup validUser ->
         match model with
-        | FillingForm form -> Success validUser
+        | FillingForm form ->
+            // Dummy implementation, here we should call the server
+            // Comment this line and uncomment the rest of the code to see
+            // how it would work if the server returned some validation errors instead
+            Success validUser
         // { form.Values with
         //       ServerErrors =
         //           { Email =
@@ -103,14 +87,9 @@ let update (msg: Msg) (model: Model) =
 
     | ResetTheDemo -> init ()
 
+// This is our form built with Fable.Form, first we declare the input fields
 let private form: Form.Form<FormValues, Msg> =
-    let onSubmit email name password makePublic =
-        Signup
-            { Email = email
-              Password = password
-              Name = name
-              MakePublic = makePublic }
-
+    // Note for the email field we check if there are server errors
     let emailField =
         Form.Make.FieldEmail(
             "Email",
@@ -119,18 +98,14 @@ let private form: Form.Form<FormValues, Msg> =
             update = (fun v vs -> { vs with Email = v }),
             serverError =
                 (fun values ->
+                    // Only show the error if the email field value hasn't changed
                     match values.ServerErrors.Email with
                     | Some er when er.Value = values.Email -> Some er.Error
                     | _ -> None)
         )
 
     let nameField =
-        Form.Make.FieldText(
-            "Name",
-            parse = Validation.tryParseName,
-            get = (fun vs -> vs.Name),
-            update = (fun v vs -> { vs with Name = v })
-        )
+        Form.Make.FieldText("Name", get = (fun vs -> vs.Name), update = (fun v vs -> { vs with Name = v }))
 
     let passwordField =
         Form.Make.FieldPassword(
@@ -140,6 +115,8 @@ let private form: Form.Form<FormValues, Msg> =
             update = (fun v vs -> { vs with Password = v })
         )
 
+    // For the repeat password field we use Form.meta to be able to access
+    // the rest of the form values so we can check if the passwords match
     let repeatPasswordField =
         Form.meta
             (fun values ->
@@ -161,6 +138,15 @@ let private form: Form.Form<FormValues, Msg> =
             get = (fun vs -> vs.MakePublic),
             update = (fun v vs -> { vs with MakePublic = v })
         )
+
+    // Note the onSubmit function receives the validated values of all the fields,
+    // if we remove some of the fields this won't compile
+    let onSubmit email name password makePublic =
+        Signup
+            { Email = email
+              Password = password
+              Name = name
+              MakePublic = makePublic }
 
     Form.succeed onSubmit
     |> Form.append emailField

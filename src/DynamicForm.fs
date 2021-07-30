@@ -71,6 +71,8 @@ let teacherForm =
     |> Form.append subjectField
     |> Form.section "Teacher"
 
+// Form.andThen can take the result of the previous input to dynamically how the rest of the form should look like
+// The Form.Make.Select helper is used to automatically generate a select HTML element from an F# union type using reflection
 let form: Form.Form<Values, Msg> =
     Form.Make.Select("Type", get = (fun vs -> vs.UserType), update = (fun v vs -> { vs with UserType = v }))
     |> Form.andThen
